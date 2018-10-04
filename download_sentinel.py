@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 from sentinelsat import SentinelAPI, read_geojson, geojson_to_wkt
 from datetime import date
 from sqlalchemy import create_engine
@@ -13,7 +15,7 @@ def get_api(user,password):
 	return api
 
 def critical_test():
-	# Vi skal huske at spørge om man faktisk vil downloade alle billeder"
+	# Vi skal huske at spoerge om man faktisk vil downloade alle billeder"
 	pass
 
 def db_get_filenames(db_user,db_pass,id, schema, table_name, database):
@@ -27,7 +29,7 @@ def db_get_filenames(db_user,db_pass,id, schema, table_name, database):
 		print("Der er noget galt med det ID der bruges ... Det skal være enten String eller en liste")
 	return my_query
 
-def download_metadata(db_user,db_pass,api_user,api_pass,table_name='metadata',schema='satellit',database='afstand',platformname='Sentinel-2',aoi='aoi_4326.geojson'):
+def download_metadata(db_user,db_pass,api_user,api_pass,table_name='s2_metadata',schema='public',database='afstand',platformname='Sentinel-2',aoi='aoi_4326.geojson'):
 	api = get_api(api_user,api_pass)
 	engine = init_db(db_user,db_pass,database)
 	footprint = geojson_to_wkt(read_geojson(aoi))
@@ -37,6 +39,7 @@ def download_metadata(db_user,db_pass,api_user,api_pass,table_name='metadata',sc
 			     cloudcoverpercentage=(0,100))
 	products_df = api.to_dataframe(products)
 	products_df.to_sql(table_name, engine, schema=schema,if_exists='replace')
+	engine.execute('alter table {1}.{0} add primary key(index)'.format(table_name,schema)) 
 	print("Metadata updated in database")
 
 
@@ -71,7 +74,7 @@ def download_thumbnails(db_user,db_pass,folder='data',id=None,database='afstand'
 		my_files = os.listdir(folder)
 		query = engine.execute('select * from satellit.metadata where filename in {0}'.format(tuple(my_files))).fetchall()
 		print(query)
-#download_metadata('emil','12345','hy42','PqwurxnX1','metadata')
+download_metadata('emil','12345','hy42','PqwurxnX1')
 #download_file('emil','12345','hy42','PqwurxnX1','026b9f03-3d50-43b3-bec5-8204e8c8a442')
 #download_file('emil','12345','hy42','PqwurxnX1',['026b9f03-3d50-43b3-bec5-8204e8c8a442','0026c920-f7dc-466b-90fa-e0cb4d79818e'])
-download_thumbnails('emil','12345')
+#download_thumbnails('emil','12345')
