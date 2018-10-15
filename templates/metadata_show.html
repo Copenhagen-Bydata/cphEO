@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<table class="table">
+ <thead>
+  <tr>
+   <th scope="col">#</th>
+   <th scope="col">Index</th>
+   <th scope="col">Eksempel</th>
+   <th scope="col">Cloud</th>
+   <th scope="col">Ingestion date <span id="ingdat" class="badge badge-pill badge-info">i</span></th>
+   <th scope="col">End position <span id="endpos" class="badge badge-pill badge-info">i</span></th>
+   <th scope="col">Select</th>
+  </tr>
+ </thead>
+ <tbody>
+{% for data in metadata %}
+  <tr>
+   <th scope="row">{{loop.index}}</th>
+    <td>{{data[0]}}</td>
+    <td><img heigth="128px" width="128px"  src="{{ url_for('static', filename=data[3]) }}"></img></td>
+    <td>{{data[1]}}</td>
+    <td>{{data[4]}}</td>
+    <td>{{data[2]}}</td>
+    <td><button type="button" id="select" class="btn btn-secondary">Vælg</button></td>
+  </tr>
+{% endfor %}
+ </tbody>
+</table>
+<footer class="fixed-bottom">
+	<div class="container">
+		<button type="button" id="dl_files" class="btn btn-warning">Download</button></td>
+	</div>
+</footer>
+
+
+{% endblock %}
+
+{% block myscript %}
+
+<script>
+$("#endpos").popover({content: "The sensing start and stop times of a product correspond to the time of the satellite on-board acquisition of respectively the first and last line of the image in the product",trigger: "hover"});
+$("#ingdat").popover({content: "Please note that the ingestion date does not correspond to the generation date of the product processed at the ground segment. The ingestion date is the date of publication of the product on the Data Hub rolling archive.", trigger:"hover"})
+
+$("#select").click(function() {
+	$(this).toggleClass("btn-secondary")
+	$(this).toggleClass("btn-success")
+});
+
+$("#dl_files").click(function() {
+	//
+});
+
+</script>
+{% endblock %}

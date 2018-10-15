@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from flask import Flask,jsonify
+from flask import Flask,jsonify, render_template, request
 #from flask_sqlalchemy import SQLAlchemy
 import psycopg2, json
 import multiprocessing
+from flask_rq2 import RQ
 
 def init_db(db_user,db_pass,database):
 	conn = psycopg2.connect("dbname={0} user={1} password={2} host=localhost port=5432".format(database,db_user,db_pass))
@@ -14,6 +15,14 @@ app = Flask(__name__)
 #app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://{0}:{1}@localhost:5432/{2}'.format('emil','12345','afstand')
 #db = SQLAlchemy(app)
 #from models.models import S2_Metadata
+rq = RQ(app)
+
+@app.route('/add/<int:x>/<int:y>')
+def add(x, y):
+    from download_sentinel import calculate
+    job = calculate.queue(x, y)
+    sleep(2.0)
+    return str(job.result)
 
 @app.route("/")
 def hello():
@@ -31,13 +40,15 @@ def reset_metadata():
 @app.route("/metadata/<table>")
 def metadata(table):
 	cur = init_db('emil','12345','afstand')
-	cur.execute("SELECT * from satellit.{0}".format(table))
+	cur.execute("SELECT index,cloudcoverpercentage,ingestiondate,thumb_loc,endposition from satellit.{0} order by ingestiondate desc".format(table))
 	my_metadata = cur.fetchall()
 	# Lige nu faar man al data i metadatatabellen
-	return jsonify(my_metadata)
+	return render_template('metadata_show.html', metadata=my_metadata)
+
 
 @app.route("/download/<image_id>")
 def download_image(image_id):
+	from download_sentinel import download_file
 	# Her kan man downloade et specifikt billede
 	return "Hello"
 

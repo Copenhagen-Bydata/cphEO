@@ -15,17 +15,11 @@ import os.path
 # Set locations of files
 #redImg = "SatImg_raadata/2015_B04_clip.tif"
 #nirImg = "SatImg_raadata/2015_B08_clip.tif"
-redImg = "data/S2A_MSIL1C_20171027T103131_N0206_R108_T33UUB_20171027T141000.SAFE/GRANULE/L1C_T33UUB_A012260_20171027T103128/IMG_DATA/T33UUB_20171027T103131_B04.jp2"
-nirImg = "data/S2A_MSIL1C_20171027T103131_N0206_R108_T33UUB_20171027T141000.SAFE/GRANULE/L1C_T33UUB_A012260_20171027T103128/IMG_DATA/T33UUB_20171027T103131_B08.jp2"
-NDVI = 'output/2017_NDVI.tif'
-NDVI_GreenAreas_WGS84 = 'Outputs/NDVI/2015_NDVI_GroeneOmraader.tif'
-NDVI_GreenAreas = 'Outputs/NDVI/2015_NDVI_GroeneOmraader_reproj.tif'
-outputNoBuild = 'Outputs/NDVI/2015_NDVI_GroeneOmraader_UdenByg.tif'
-outputPrivat = 'Outputs/NDVI/2015_NDVI_GroeneOmraader_Privat.tif'
-outputPublic = 'Outputs/NDVI/2015_NDVI_GroeneOmraader_Offentlig.tif'
-outputPublicKnown = 'Outputs/NDVI/2015_NDVI_GroeneOmraader_Offentlig_Kendt.tif'
-outputPublicNotKnown = 'Outputs/NDVI/2015_NDVI_GroeneOmraader_Offentlig_ikkeKendt.tif'
-outputStatistics = 'Outputs/NDVI/2015_Statistics_NDVI.csv'
+
+#S2B_MSIL2A_20180420T103019_N0207_R108_T33UUB_20180420T114307.SAFE
+#data/S2A_MSIL1C_20180704T103021_N0206_R108_T33UUB_20180704T174024.SAFE/GRANULE/L1C_T33UUB_A015835_20180704T103023/IMG_DATA
+redImg = "data/S2A_MSIL1C_20180704T103021_N0206_R108_T33UUB_20180704T174024.SAFE/GRANULE/L1C_T33UUB_A015835_20180704T103023/IMG_DATA/T33UUB_20180704T103021_B04.jp2"
+nirImg = "data/S2A_MSIL1C_20180704T103021_N0206_R108_T33UUB_20180704T174024.SAFE/GRANULE/L1C_T33UUB_A015835_20180704T103023/IMG_DATA/T33UUB_20180704T103021_B08.jp2"
 clipBuild = 'Shapefiles/NDVI/UdenBygninger.shp'
 clipPrivat = 'Shapefiles/NDVI/Villaer.shp'
 clipPublic = 'Shapefiles/NDVI/Offentlig.shp'
@@ -41,15 +35,28 @@ def overall_ndvi(redImg,nirImg,aoi=True):
         red = io.imread(red_aoi)
         nir = io.imread(nir_aoi)
         ndvi = (nir - red) / (nir + red)
-        outputPlace = os.path.dirname(nir_aoi) + "/" + name + "_NDVI.tif"
+        outputPlace = os.path.dirname(nir_aoi) + "/" + name.split("_")[0] + "_" +name.split("_")[1] + "_NDVI.tif"
         io.imsave(outputPlace, ndvi)
-        outputLoc = os.path.dirname(nir_aoi) + "/" + name + "_GREEN.tif"
-        calculate_green(outputPlace,outputLoc=outputLoc)
+        rasterio_writer(red_aoi,outputPlace,ndvi)
+        outputLoc = os.path.dirname(nir_aoi) + "/" + name.split("_")[0] + "_" + name.split("_")[1]  + "_GREEN.tif"
+        return outputPlace,outputLoc
     else:
         pass
 
+
+def rasterio_writer(InputTIF,OutputTIF,data = None):
+    with rasterio.open(InputTIF) as src:
+        out_meta = src.meta.copy()
+        out_image = src.read(1)
+    out_meta.update(dtype=data.dtype)
+    with rasterio.open(OutputTIF, "w", **out_meta) as dest:
+        if data.any() != None:
+            dest.write(data,1)
+        else:
+            dest.write(out_image)
+
 # CALCULATE GREEN AREAS
-def calculate_green(NDVI,outputLoc=NDVI_GreenAreas_WGS84):
+def calculate_green(NDVI,outputLoc=None):
     ndviOrg = io.imread(NDVI)
     ndviNew = ndviOrg.copy()
     for i in range(len(ndviNew)):
@@ -58,7 +65,8 @@ def calculate_green(NDVI,outputLoc=NDVI_GreenAreas_WGS84):
                 ndviNew[i][ii] = 1
             elif ((ndviNew[i][ii] >= 0.2) & (ndviNew[i][ii] <= 0.9)) == False:
                 ndviNew[i][ii] = 0
-    io.imsave(outputLoc, ndviNew)
+    rasterio_writer(NDVI,outputLoc, ndviNew)
+    return outputLoc
 
 # REPROJECT IMAGE
 def reproject_image(redImg):
@@ -88,11 +96,6 @@ def create_new_tif():
     projNew = dst_ds.GetProjection()
     dst_ds.GetRasterBand(1).WriteArray(array)
 
-# Close open files
-def cleanup():
-    src = None
-    dst_ds = None
-
 def get_proj4(InputTIF):
     srs = osr.SpatialReference()
     src = gdal.Open(InputTIF)
@@ -101,35 +104,41 @@ def get_proj4(InputTIF):
     proj4 = srs.ExportToWkt()
     return proj4
 
-def masker(InputTIF, OutputTIF='output/aoi', InputSHP='data/aux/klipper_32633.shp'):
+def masker(InputTIF, OutputTIF='output/aoi', name_add=None, InputSHP='data/aux/klipper_32633.shp', invert=False):
     # CLIP IMAGE WITH SHAPEFILES
+    if name_add is None:
+        name_add = ''
     base = os.path.basename(InputTIF)
+    base = os.path.splitext(base)[0] + name_add
     img_name = base.split("_")
-    img_out_name = os.path.splitext(base)[0] + "_" + os.path.splitext(base)[1]
-    print(img_out_name)
-    out_path = OutputTIF + "/" + img_name[0]
+    out_path = OutputTIF + "/" + img_name[0] + "_" + img_name[1]
     if os.path.exists(out_path):
         pass
     else:
         os.mkdir(out_path)
+
     proj4 = get_proj4(InputTIF)
+
     with fiona.open(InputSHP, "r") as shapefile:
         features = [feature["geometry"] for feature in shapefile]
-
     with rasterio.open(InputTIF) as src:
-        out_image, out_transform = rasterio.mask.mask(src, features, crop=True)
         out_meta = src.meta.copy()
-
+        if invert==False:
+            out_image, out_transform = rasterio.mask.mask(src, features, crop=True)
+        else:
+            out_image, out_transform = rasterio.mask.mask(src, features, crop=False,invert=True, filled=False)
     out_meta.update({"driver": "GTiff",
                  "height": out_image.shape[1],
                  "width": out_image.shape[2],
                  "transform": out_transform,
                  "crs": proj4})
 
-    OutputTIF=out_path + "/" + name + ".tif"
+    OutputTIF=out_path + "/" + base + ".tif"
     with rasterio.open(OutputTIF, "w", **out_meta) as dest:
         dest.write(out_image)
-    return OutputTIF, img_out_name
+    return OutputTIF, base
+
+
 
 def privatGreen(InputTIF, OutputTIF, InputSHP):
     with fiona.open(InputSHP, "r") as shapefile:
@@ -139,60 +148,6 @@ def privatGreen(InputTIF, OutputTIF, InputSHP):
         out_image, out_transform = rasterio.mask.mask(src, features, crop=True)
         out_meta = src.meta.copy()
     proj4 = get_proj4(inputTIF)
-    out_meta.update({"driver": "GTiff",
-                 "height": out_image.shape[1],
-                 "width": out_image.shape[2],
-                 "transform": out_transform,
-                 "crs": proj4})
-
-    with rasterio.open(OutputTIF, "w", **out_meta) as dest:
-        dest.write(out_image)
-
-def publicGreen(InputTIF, OutputTIF, InputSHP):
-    with fiona.open(InputSHP, "r") as shapefile:
-        features = [feature["geometry"] for feature in shapefile]
-
-    with rasterio.open(InputTIF) as src:
-        out_image, out_transform = rasterio.mask.mask(src, features, crop=True)
-        out_meta = src.meta.copy()
-
-    proj4 = get_proj4(InputTIF)
-
-    out_meta.update({"driver": "GTiff",
-                 "height": out_image.shape[1],
-                 "width": out_image.shape[2],
-                 "transform": out_transform,
-                 "crs": proj4})
-
-    with rasterio.open(OutputTIF, "w", **out_meta) as dest:
-        dest.write(out_image)
-
-def knownGreen(InputTIF, OutputTIF, InputSHP):
-    with fiona.open(InputSHP, "r") as shapefile:
-        features = [feature["geometry"] for feature in shapefile]
-
-    with rasterio.open(InputTIF) as src:
-        out_image, out_transform = rasterio.mask.mask(src, features, crop=True)
-        out_meta = src.meta.copy()
-    proj4 = get_proj4(InputTIF)
-    out_meta.update({"driver": "GTiff",
-                 "height": out_image.shape[1],
-                 "width": out_image.shape[2],
-                 "transform": out_transform,
-                 "crs": proj4})
-
-    with rasterio.open(OutputTIF, "w", **out_meta) as dest:
-        dest.write(out_image)
-
-def notKnownGreen(InputTIF, OutputTIF, InputSHP):
-    with fiona.open(InputSHP, "r") as shapefile:
-        features = [feature["geometry"] for feature in shapefile]
-
-    with rasterio.open(InputTIF) as src:
-        out_image, out_transform = rasterio.mask.mask(src, features, crop=True)
-        out_meta = src.meta.copy()
-
-    proj4 = get_proj4(InputTIF)
     out_meta.update({"driver": "GTiff",
                  "height": out_image.shape[1],
                  "width": out_image.shape[2],
@@ -222,4 +177,9 @@ def calculate_stats():
     outputLoc = outputStatistics
     df.to_csv(outputLoc, index=True, index_label='Area Type')
 
-overall_ndvi(redImg,nirImg)
+ndviLoc, greenLoc = overall_ndvi(redImg,nirImg)
+green_loc = calculate_green(ndviLoc,greenLoc)
+# Subtract buildings
+masker(green_loc,name_add='_udenbyg',InputSHP='data/aux/BYGNING_EPSG32633_Clip_Dissolved.shp')
+masker(greenLoc,name_add='_privat',InputSHP='data/aux/kbh_u_byg_erase.shp')
+
