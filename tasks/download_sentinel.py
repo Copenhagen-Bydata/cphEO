@@ -1,17 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from sentinelsat import SentinelAPI, read_geojson, geojson_to_wkt
-from datetime import date
+from datetime import date, timedelta
+from time import strftime, strptime
 from sqlalchemy import create_engine
 from zipfile import ZipFile
 import os
-from flask_rq2 import RQ
-
-rq=RQ()
-
-@rq.job
-def add(x, y):
-    return x + y
 
 def init_db(user,password,database):
 	engine = create_engine('postgresql://{0}:{1}@localhost:5432/{2}'.format(user,password,database))
@@ -20,10 +14,6 @@ def init_db(user,password,database):
 def get_api(user,password):
 	api = SentinelAPI(user,password, 'https://scihub.copernicus.eu/dhus')
 	return api
-
-def critical_test():
-	# Vi skal huske at spoerge om man faktisk vil downloade alle billeder"
-	pass
 
 def db_get_filenames(db_user,db_pass,id, schema, table_name, database):
 	engine = init_db(db_user,db_pass,database)
@@ -48,11 +38,26 @@ def download_metadata(db_user,db_pass,api_user,api_pass,table_name='s2_metadata'
 	products_df.to_sql(table_name, engine, schema=schema,if_exists='replace')
 	engine.execute('alter table {1}.{0} add primary key(index)'.format(table_name,schema))
 	engine.execute('alter table {1}.{0} add column thumb_loc text'.format(table_name, schema)) 
-	print("Metadata updated in database")
-	print(dl_thumbs)
 	download_thumbnails(db_user,db_pass,api_user,api_pass)
 
-@rq.job
+def update_metadata(db_user,db_pass,api_user,api_pass,table_name="s2_metadata",schema='satellit',database='afstand',platformname='Sentinel-2',aoi='data/aux/aoi_4326.geojson',dl_thumbs=True):
+	api = get_api(api_user,api_pass)
+	engine=init_db(db_user,db_pass,database)
+	last_date = engine.execute("select endposition from satellit.s2_metadata order by endposition desc limit 1").fetchone()
+	#my_struct_time = strptime(last_date[0], "%Y-%m-%d %H:%M:%S.%f")
+	#print(my_struct_time)
+	tomorrow = last_date[0] + timedelta(days=1)
+	my_time = str(tomorrow.strftime("%Y%m%d"))
+	#my_time = str(my_time.tm_year) + str(my_time.tm_mon) + str(my_time.tm_mday)
+	print(my_time)
+	footprint = geojson_to_wkt(read_geojson(aoi))
+	products = api.query(footprint,
+			     date=(my_time, 'NOW'),
+			     platformname=platformname,
+			     cloudcoverpercentage=(0,100))
+	products_df = api.to_dataframe(products)
+	products_df.to_sql(table_name, engine, schema=schema, if_exists='append')
+
 def download_file(db_user,db_pass,api_user,api_pass,id,table_name='s2_metadata', schema='satellit', database='afstand'):
 	api = get_api(api_user,api_pass)
 	if isinstance(id,list):
@@ -71,6 +76,7 @@ def unzip_file(id, db_user,db_pass,table_name,schema,database,list,folder='data'
 		with ZipFile(file_name, 'r') as zip_ref:
 			zip_ref.extractall(folder)
 			zip_ref.close()
+	delete_zips()
 
 def delete_zips(folder='data',id=None):
 	my_zips = os.listdir(folder)
