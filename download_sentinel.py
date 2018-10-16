@@ -7,8 +7,10 @@ from zipfile import ZipFile
 import os
 from flask_rq2 import RQ
 
+rq=RQ()
+
 @rq.job
-def calculate(x, y):
+def add(x, y):
     return x + y
 
 def init_db(user,password,database):
@@ -90,7 +92,7 @@ def download_thumbnails(db_user,db_pass,api_user,api_pass,folder='thumbnails',id
 				open("static/" + path, 'wb').write(r.content)
 			engine.execute("update {0}.{1} set thumb_loc='{2}' where index='{3}'".format(schema,table_name,path,link[0]))
 
-download_thumbnails('emil','12345','hy42','PqwurxnX1')
+#download_thumbnails('emil','12345','hy42','PqwurxnX1')
 #download_metadata('emil','12345','hy42','PqwurxnX1')
 #download_file('emil','12345','hy42','PqwurxnX1','25b13005-f5ba-404b-9ae3-cbfd9525388e')
 #download_file('emil','12345','hy42','PqwurxnX1',['026b9f03-3d50-43b3-bec5-8204e8c8a442','0026c920-f7dc-466b-90fa-e0cb4d79818e'])

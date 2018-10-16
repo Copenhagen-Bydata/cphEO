@@ -1,32 +1,54 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from flask import Flask,jsonify, render_template, request
-#from flask_sqlalchemy import SQLAlchemy
 import psycopg2, json
 import multiprocessing
-from flask_rq2 import RQ
+#from celery import Celery
+from celery import Celery
+
+app = Flask(__name__)
+
+def make_celery(flask_app):
+    celery = Celery(
+        flask_app.import_name,
+        backend=flask_app.config['CELERY_RESULT_BACKEND'],
+        broker=flask_app.config['CELERY_BROKER_URL']
+    )
+    celery.conf.update(flask_app.config)
+
+    class ContextTask(celery.Task):
+        def __call__(self, *args, **kwargs):
+            with flask_app.app_context():
+                return self.run(*args, **kwargs)
+
+    celery.Task = ContextTask
+    return celery
+
+app.config.update(
+    CELERY_BROKER_URL='redis://localhost:6379',
+    CELERY_RESULT_BACKEND='redis://localhost:6379'
+)
+celery = make_celery(app)
 
 def init_db(db_user,db_pass,database):
 	conn = psycopg2.connect("dbname={0} user={1} password={2} host=localhost port=5432".format(database,db_user,db_pass))
 	cur = conn.cursor()
 	return cur
 
-app = Flask(__name__)
-#app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://{0}:{1}@localhost:5432/{2}'.format('emil','12345','afstand')
-#db = SQLAlchemy(app)
-#from models.models import S2_Metadata
-rq = RQ(app)
+@celery.task()
+def add_together(a,b):
+        return a + b
 
 @app.route('/add/<int:x>/<int:y>')
-def add(x, y):
-    from download_sentinel import calculate
-    job = calculate.queue(x, y)
-    sleep(2.0)
-    return str(job.result)
+def calculate(x, y):
+	from cpheo import add_together
+	job = add_together.delay(1, 2)
+	job.wait()
+	return "Hello"
 
 @app.route("/")
 def hello():
-    return "<h1 style='color:blue'>Hello There!</h1>"
+	return "<h1 style='color:blue'>Hello There!</h1>"
 
 @app.route("/metadata/reset")
 def reset_metadata():
@@ -63,4 +85,4 @@ def cleanup_all():
 	return "Hello"
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', debug=True)
+    app.run(host='0.0.0.0')
