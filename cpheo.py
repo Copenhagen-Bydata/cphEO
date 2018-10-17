@@ -36,14 +36,14 @@ def metadata_update():
 @app.route("/metadata/<table>")
 def metadata(table):
 	cur = init_db('emil','12345','afstand')
-	cur.execute("SELECT index,cloudcoverpercentage,ingestiondate,thumb_loc,endposition from satellit.{0} order by ingestiondate desc".format(table))
+	cur.execute("SELECT index,cloudcoverpercentage,to_char(ingestiondate, 'YYYY-MM-DD'),thumb_loc,to_char(endposition,'YYYY-MM-DD') from satellit.{0} where cloudcoverpercentage < 30 and processinglevel = 'Level-1C' order by endposition desc".format(table))
 	my_metadata = cur.fetchall()
 	# Lige nu faar man al data i metadatatabellen
 	return render_template('metadata_show.html', metadata=my_metadata)
 
-@app.route("inventory/all")
+@app.route("/inventory/all")
 def inventory():
-	
+	return "Placeholder - Come back later!"
 
 @app.route("/download/status")
 def download_status():
