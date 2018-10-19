@@ -11,6 +11,7 @@ import rasterio
 import rasterio.mask
 from pathlib import Path
 import os, os.path
+import shutil
 
 # Set locations of files
 #redImg = "SatImg_raadata/2015_B04_clip.tif"
@@ -104,19 +105,25 @@ def get_proj4(InputTIF):
     proj4 = srs.ExportToWkt()
     return proj4
 
-def masker_iter():
+def masker_iter(with_cleanup=False):
+    from tasks.download_sentinel import init_db
+    engine = init_db('emil','12345','afstand')
     #from ndvi_emil import masker
     for element in os.listdir("data"):
         if element.endswith(".SAFE"):
             granule = "data/" + element + "/GRANULE/"
             my_file = os.listdir(granule)
-            print(my_file)
             file_dir = "data/" + element + "/GRANULE/" +  my_file[0] + "/IMG_DATA/"
             for file in os.listdir(file_dir):
                 final_dir = file_dir + "/" + str(file)
-                masker(final_dir)
+                id = engine.execute("select index from satellit.s2_metadata where filename = '{0}'".format(element)).fetchone()
+                masker(final_dir,id[0])
+            if with_cleanup:
+                shutil.rmtree("data/" + element)
+            from download_sentinel import inventory_create
+            inventory_create('emil','12345','afstand')
 
-def masker(InputTIF, OutputTIF='output/aoi', name_add=None, InputSHP='data/aux/klipper_32633.shp', invert=False):
+def masker(InputTIF, id, OutputTIF='output/aoi', name_add=None, InputSHP='data/aux/klipper_32633.shp', invert=False):
     # CLIP IMAGE WITH SHAPEFILES
     if name_add is None:
         name_add = ''
@@ -124,11 +131,11 @@ def masker(InputTIF, OutputTIF='output/aoi', name_add=None, InputSHP='data/aux/k
     base = os.path.basename(InputTIF)
     base = os.path.splitext(base)[0] + name_add
     img_name = base.split("_")
-    out_path = OutputTIF + "/" + img_name[0] + "_" + img_name[1]
+    out_path = OutputTIF + "/" + id
     if os.path.exists(out_path):
         pass
     else:
-        os.mkdir(out_path)
+        os.makedirs(out_path, exist_ok=True)
 
     proj4 = get_proj4(InputTIF)
 

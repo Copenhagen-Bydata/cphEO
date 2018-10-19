@@ -6,6 +6,7 @@ from time import strftime, strptime
 from sqlalchemy import create_engine
 from zipfile import ZipFile
 import os
+from PIL import Image
 
 def init_db(user,password,database):
 	engine = create_engine('postgresql://{0}:{1}@localhost:5432/{2}'.format(user,password,database))
@@ -84,12 +85,27 @@ def delete_zips(folder='data',id=None):
 		if file.endswith('.zip'):
 			os.remove(folder + "/" + file)
 
+def inventory_create(db_user, db_pass, database):
+	engine = init_db(db_user, db_pass, database)
+	engine.execute("truncate satellit.download_status")
+	for element in os.listdir('output/aoi'):
+		for file in os.listdir('output/aoi/' + str(element)):
+			my_file = os.path.splitext(file)
+			if my_file[0][-3:] == 'TCI':
+				print(my_file)
+				im = Image.open('output/aoi/' + str(element) + "/" + str(file))
+				size = 128, 128
+				im.thumbnail(size)
+				output_img = 'aoi/' + str(element) + ".jpg"
+				im.save("static/" + output_img, 'JPEG')
+				engine.execute("insert into satellit.download_status (index, dl, example) values ('{0}',{1},'{2}')".format(element, True, output_img))
+
 def download_thumbnails(db_user,db_pass,api_user,api_pass,folder='thumbnails',id=None,schema='satellit',database='afstand',table_name='s2_metadata'):
 	engine = init_db(db_user,db_pass,database)
 	import requests
 	from requests.auth import HTTPBasicAuth
 	if id is None:
-		query = engine.execute('select index,link_icon,title from {0}.{1}'.format(schema,table_name,)).fetchall()
+		query = engine.execute('select index,link_icon,title from {0}.{1} where cloudcoverpercentage < 30 and processinglevel = "Level-1C"'.format(schema,table_name,)).fetchall()
 		for link in query:
 			r = requests.get(link[1], auth=HTTPBasicAuth(api_user,api_pass))
 			path = folder + "/" + link[2] + ".jpg"

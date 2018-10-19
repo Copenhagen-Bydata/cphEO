@@ -19,6 +19,7 @@
    <th scope="col">Ingestion date <span class="fas fa-calendar-alt" id="dates"></span><span id="ingdat" class="badge badge-pill badge-info float-right">i</span></th>
    <th scope="col">End position <span id="endpos" class="badge badge-pill badge-info">i</span></th>
    <th scope="col">Select</th>
+   <th scope="col">In db?</th>
   </tr>
  </thead>
  <tbody>
@@ -30,15 +31,17 @@
     <td>{{data[1]}}</td>
     <td>{{data[4]}}</td>
     <td>{{data[2]}}</td>
-    <td><button type="button" id="datepicker_from" class="select btn btn-secondary">Vælg</button></td>
+    <td><button type="button" class="select btn btn-secondary">Vælg</button></td>
+    <td>{% if data[5] == True %}<span style="height:64px;" class="far fa-check-square"></span>{% else %}{% endif %}</td>
   </tr>
 {% endfor %}
  </tbody>
 </table>
-<footer class="fixed-bottom">
-	<div class="container">
-		<button type="button" id="dl_files" class="btn btn-warning">Download</button></td>
-	</div>
+<footer style="width: 100px; left: 30%" class="fixed-bottom">
+		<form action="{{ url_for('download_image') }}" method="post">
+		<input id="inputField" style="visibility:hidden" type="text" name="indexFiles">
+		<input type="submit" id="dl_files" class="btn btn-warning"></button></td>
+		</form>
 </footer>
 
 {% endblock %}
@@ -47,19 +50,12 @@
 
 <script>
 table = $(".table").DataTable();
-    
-
-/*
-     $("#min, #max").keyup( function() {
-        table.draw();
-    } );
-    */
-
+   
 $("cloudycloud").popover({content: "Only showing images with less than 30 % clouds - as classified by ESA", trigger:"hover"});
 $("#endpos").popover({content: "The sensing start and stop times of a product correspond to the time of the satellite on-board acquisition of respectively the first and last line of the image in the product",trigger: "hover"});
 $("#ingdat").popover({content: "Please note that the ingestion date does not correspond to the generation date of the product processed at the ground segment. The ingestion date is the date of publication of the product on the Data Hub rolling archive.", trigger:"hover"})
 
-$(".select").click(function() {
+$(".table").on('click', ".select", function() {
 	$(this).toggleClass("btn-secondary")
 	$(this).toggleClass("btn-success")
 });
@@ -69,20 +65,7 @@ $("#dl_files").click(function() {
 	$(".btn-success").parent().parent().children(".index_no").each(function(key,value){my_array.push(value.innerHTML)})
 	console.log(my_array)
 	console.log("142.93.97.60:5000/download/" + my_array.toString())
-	/*
-	$.post("142.93.97.60:5000/download/" + my_array.toString(), function() {
-  	alert( "success" );
-	})
-  	.done(function() {
-    	alert( "second success" );
-  	})
-  	.fail(function() {
-    	alert( "error" );
-  	})
-  	.always(function() {
-    	alert( "finished" );
-  	});
-	*/
+	$("#inputField").val(my_array)
 });
 
 $.fn.dataTable.ext.search.push(
@@ -91,8 +74,6 @@ $.fn.dataTable.ext.search.push(
         var max  = $('#max').val();
         var createdAt = data[4] || 0; // Our date column in the table
 
-	console.log(moment(createdAt).isSameOrAfter(min))
-	console.log(moment(createdAt).isSameOrBefore(max))
         if  ( 
                 ( min == "" || max == "" )
                 || 
@@ -111,16 +92,14 @@ $('#dates').daterangepicker({
 	locale: {
 		cancelLabel: 'Clear'
 	}
-}, function(start, end, label) {
-
-	$("#max").val(end.format('YYYY-MM-DD'))
-	$("#min").val(start.format('YYYY-MM-DD'))
+	}, function(start, end, label) {
+		$("#max").val(end.format('YYYY-MM-DD'))
+		$("#min").val(start.format('YYYY-MM-DD'))
 });
 
 $('#dates').on('apply.daterangepicker', function(ev, picker) {
 	table.draw()
-})
-
+});
 
 </script>
 
