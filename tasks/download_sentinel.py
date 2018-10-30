@@ -62,9 +62,10 @@ def update_metadata(db_user,db_pass,api_user,api_pass,table_name="s2_metadata",s
 def download_file(db_user,db_pass,api_user,api_pass,id,table_name='s2_metadata', schema='satellit', database='afstand'):
 	api = get_api(api_user,api_pass)
 	if isinstance(id,list):
-		query = db_get_filenames(db_user,db_pass,id, table_name, schema, database)
-		api.download_all(id,'data')
-		unzip_file(id,db_user,db_pass,table_name,schema,database,list=True)
+		for file in id:
+			query = db_get_filenames(db_user,db_pass,file, table_name, schema, database)
+			api.download(file,'data')
+			unzip_file(file,db_user,db_pass,table_name,schema,database,list=True)
 	else:
 		api.download(id,'data')
 		unzip_file(id,db_user,db_pass,table_name,schema,database,list=False)
@@ -89,6 +90,7 @@ def inventory_create(db_user, db_pass, database):
 	engine = init_db(db_user, db_pass, database)
 	engine.execute("truncate satellit.download_status")
 	for element in os.listdir('output/aoi'):
+		os.mkdir('output/aoi/' + str(element) + "/analyser")
 		for file in os.listdir('output/aoi/' + str(element)):
 			my_file = os.path.splitext(file)
 			if my_file[0][-3:] == 'TCI':
