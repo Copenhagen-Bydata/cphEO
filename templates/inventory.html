@@ -15,10 +15,9 @@
   <tr>
    <th scope="col">#</th>
    <th scope="col">Index</th>
-
    <th scope="col">Eksempel</th>
+   <th scope="col">Analyser</th>
 {#
-   <th scope="col">Cloud <span id="cloudycloud" class="badge badge-pill badge-info">i</span></th>
    <th scope="col">Ingestion date <span class="fas fa-calendar-alt" id="dates"></span><span id="ingdat" class="badge badge-pill badge-info float-right">i</span></th>
    <th scope="col">End position <span id="endpos" class="badge badge-pill badge-info">i</span></th>
    <th scope="col">Select</th>#}
@@ -30,8 +29,8 @@
    <th scope="row">{{loop.index}}</th>
     <td class="index_no">{{data[0]}}</td>
     <td><img heigth="128px" width="128px"  src="{{ url_for('static', filename=data[1]) }}"></img></td>
-{#    <td>{{data[1]}}</td>
-    <td>{{data[4]}}</td>
+    <td>{{data[1]}}</td>
+{#    <td>{{data[4]}}</td>
     <td>{{data[2]}}</td>
     <td><button type="button" class="select btn btn-secondary">Vælg</button></td> #}
   </tr>

@@ -33,26 +33,16 @@ def overall_ndvi(id,make_aoi=False):
         return outputPlace,outputLoc
     else:
         location = "output/aoi/" + str(id)
-        with rasterio.open(redImg) as red:
-             red_meta = red.meta.copy()
-             red_image = red.read(1)
-        with rasterio.open(nirImg) as nir:
-             nir_meta = nir.meta.copy()
-             nir_image = nir.read(1)
-        #print(nir_image, red_image)
-        #from skimage import io
-        #red_image = io.imread(redImg)
-        #nir_image = io.imread(nirImg)
+        red_image, red_meta = rasterio_reader(location + "/B04.jp2")
+        nir_image, nir_meta = rasterio_reader(location + "/B08.jp2")
         np.seterr(divide='ignore', invalid='ignore')
         ndvi = np.divide((nir_image.astype(float) - red_image.astype(float)), (nir_image + red_image))
-        outputPlace = "NDVI.tif"
+        outputPlace = location + "/analyser/NDVI.tif"
         nir_meta.update(dtype=ndvi.dtype)
-        #rasterio_writer(redImg, outputPlace, ndvi)
-        #io.imsave(outputPlace, ndvi)
-        with rasterio.open(outputPlace, "w", **nir_meta) as dest:
-            dest.write(ndvi,1)
+        rasterio_writer_2(outputPlace, ndvi, nir_meta)
+    return id, location
 
-#overall_ndvi(redImg,nirImg,make_aoi=False)
+#overall_ndvi("6b5f2d2a-5717-4481-bddc-78aee733e161")
 
 def rasterio_reader(inputTIF):
 	with rasterio.open(inputTIF) as src:
@@ -76,8 +66,9 @@ def rasterio_writer(InputTIF,OutputTIF,data = None):
             pass
 
 #CALCULATE GREEN AREAS
-def calculate_green(NDVI,outputLoc=None):
-    ndviOrg, meta = rasterio_reader(NDVI)
+def calculate_green(id,outputLoc=None):
+    location = "output/aoi/" + str(id) + "/analyser/"
+    ndviOrg, meta = rasterio_reader(location + "NDVI.tif")
     #ndviNew = ndviOrg.copy()
     for i in range(len(ndviOrg)):
         for ii in range(len(ndviOrg[i])):
@@ -85,9 +76,12 @@ def calculate_green(NDVI,outputLoc=None):
                 ndviOrg[i][ii] = 1
             elif ((ndviOrg[i][ii] >= 0.2) & (ndviOrg[i][ii] <= 0.9)) == False:
                 ndviOrg[i][ii] = 0
-    rasterio_writer_2("green.tif", ndviOrg, meta) 
-    #rasterio_writer(NDVI,outputLoc, ndviNew)
-    #return outputLoc
+    rasterio_writer_2(location + "GREEN.tif", ndviOrg, meta) 
+    return id
+
+#id, location = overall_ndvi("6b5f2d2a-5717-4481-bddc-78aee733e161")
+#clipper(location + "/analyser/NDVI.tif", "NDVI_Bygning", "data/aux/BYGNING_EPSG32633_Clip_Dissolved.shp")
+#calculate_green(id)
 
 def get_proj4(InputTIF):
     srs = osr.SpatialReference()
@@ -117,7 +111,7 @@ def masker_iter(with_cleanup=False):
             inventory_create('emil','12345','afstand')
 
 def masker(InputTIF, id, OutputTIF='output/aoi', name_add=None, InputSHP='data/aux/kbh_32633.shp', invert=False):
-    # CLIP IMAGE WITH SHAPEFILES
+    # CLIP IMAGE WITH SHAPEFILES; Is being used with masker_iter. Do not use for regular clipping
     if name_add is None:
         name_add = ''
     print(InputTIF)
@@ -128,10 +122,8 @@ def masker(InputTIF, id, OutputTIF='output/aoi', name_add=None, InputSHP='data/a
     if os.path.exists(out_path):
         pass
     else:
-        os.makedirs(out_path, exist_ok=True)
-
+        os.makedirs(out_path + "/analyser", exist_ok=True)
     proj4 = get_proj4(InputTIF)
-
     with fiona.open(InputSHP, "r") as shapefile:
         features = [feature["geometry"] for feature in shapefile]
     with rasterio.open(InputTIF) as src:
@@ -152,31 +144,40 @@ def masker(InputTIF, id, OutputTIF='output/aoi', name_add=None, InputSHP='data/a
         dest.write(out_image)
     return OutputTIF, base
 
+def green_analysis(id):
+	if isinstance(id,list):
+		pass
+	else:
+		location = "output/aoi/" + str(id) + "/analyser/GREEN.tif"
+		clipper(location, "NDVI_PG.tif", "data/aux/clippers/privat.shp")
+		clipper(location, "NDVI_GA.tif", "data/aux/clippers/groenne_arealer.shp")
+		clipper(location, "NDVI_UG.tif", "data/aux/clippers/ukendt_groent.shp")
+		## Herfra skal der indsættes noget i en DB. Det må vente
+		#calculate_stats("output/aoi/" + str(id) + "/analyser/NDVI_PG.tif","private_green", id)
 
-
-def groenneOmraader(InputTIF):
-    os.path.basename(InputTIF)
-
+def clipper(InputTIF, name, InputSHP):
+    location = os.path.dirname(InputTIF)
     with fiona.open(InputSHP, "r") as shapefile:
         features = [feature["geometry"] for feature in shapefile]
-
     with rasterio.open(InputTIF) as src:
         out_image, out_transform = rasterio.mask.mask(src, features, crop=True)
         out_meta = src.meta.copy()
-    proj4 = get_proj4(inputTIF)
+    print(out_image.shape)
+    proj4 = get_proj4(InputTIF)
     out_meta.update({"driver": "GTiff",
                  "height": out_image.shape[1],
                  "width": out_image.shape[2],
                  "transform": out_transform,
                  "crs": proj4})
 
-    with rasterio.open(OutputTIF, "w", **out_meta) as dest:
+    #rasterio_writer_2(location + name + ".tif", out_image, out_meta)
+    location = location + "/" + str(name)
+    #rasterio_writer_2(location, out_image, out_meta)
+    with rasterio.open(location, "w", **out_meta) as dest:
         dest.write(out_image)
 
-
-
 # CALCULATE STATISTICS
-def calculate_stats(inputTIF,outputLoc):
+def calculate_stats(inputTIF,column, id,table="green"):
     statistics = []
     array, meta = rasterio_reader(inputTIF)
     unique, counts = np.unique(array, return_counts=True)
@@ -186,11 +187,9 @@ def calculate_stats(inputTIF,outputLoc):
     km2Total = round(m2Total / 1000000, 4)
     km2Green = round(m2Green / 1000000, 4)
     percentage = round((m2Green*100)/m2Total, 4)
-    statistics.append([totalPixels, m2Total, m2Green, km2Total, km2Green, percentage])
-    statisticsDF = pd.DataFrame(statistics,
-                                columns=(['total pixels', 'm2Total', 'm2Green', 'km2Total', 'km2Green', 'percGreen']))
-    df = statisticsDF.copy()
-    df.to_csv(outputLoc, index=True, sep=";", index_label='Area Type')
+    from download_sentinel import init_db
+    engine = init_db('emil','12345','afstand')
+    engine.execute("insert into satellit.{0} (index, {1}) VALUES ('{3}',{2})".format(table, column, km2Green, id))
 
 #calculate_green("NDVI.tif")
 #calculate_stats("green.tif","stats.csv")
@@ -199,4 +198,16 @@ def calculate_stats(inputTIF,outputLoc):
 # Subtract buildings
 #masker(green_loc,name_add='_udenbyg',InputSHP='data/aux/BYGNING_EPSG32633_Clip_Dissolved.shp')
 #masker(greenLoc,name_add='_privat',InputSHP='data/aux/kbh_u_byg_erase.shp')
+
+#id, location = overall_ndvi("6b5f2d2a-5717-4481-bddc-78aee733e161")
+#clipper("output/aoi/6b5f2d2a-5717-4481-bddc-78aee733e161/analyser/GREEN.tif", "NDVI_Bygning", "data/aux/BYGNING_EPSG32633_Clip_Dissolved.shp")
+#clipper("output/aoi/6b5f2d2a-5717-4481-bddc-78aee733e161/analyser/GREEN.tif", "NDVI_UG.tif", "data/aux/clippers/ukendt_groent.shp")
+#clipper("output/aoi/6b5f2d2a-5717-4481-bddc-78aee733e161/analyser/GREEN.tif", "NDVI_GA.tif", "data/aux/clippers/groenne_arealer.shp")
+#clipper("output/aoi/6b5f2d2a-5717-4481-bddc-78aee733e161/analyser/NDVI_UG.tif", "NDVI_PG.tif", "data/aux/clippers/ukendt_groent.shp")
+calculate_green("d7973697-ac11-403f-8c42-8a70a0879c8b")
+calculate_green("6b5f2d2a-5717-4481-bddc-78aee733e161")
+calculate_green("931792d9-a203-441a-8a93-094e1a152d3c")
+
+
+#calculate_green(id)
 

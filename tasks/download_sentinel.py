@@ -50,7 +50,6 @@ def update_metadata(db_user,db_pass,api_user,api_pass,table_name="s2_metadata",s
 	tomorrow = last_date[0] + timedelta(days=1)
 	my_time = str(tomorrow.strftime("%Y%m%d"))
 	#my_time = str(my_time.tm_year) + str(my_time.tm_mon) + str(my_time.tm_mday)
-	print(my_time)
 	footprint = geojson_to_wkt(read_geojson(aoi))
 	products = api.query(footprint,
 			     date=(my_time, 'NOW'),
@@ -58,6 +57,17 @@ def update_metadata(db_user,db_pass,api_user,api_pass,table_name="s2_metadata",s
 			     cloudcoverpercentage=(0,100))
 	products_df = api.to_dataframe(products)
 	products_df.to_sql(table_name, engine, schema=schema, if_exists='append')
+	engine = init_db(db_user,db_pass,database)
+	import requests
+	from requests.auth import HTTPBasicAuth
+	query = engine.execute('select index,link_icon,title from {0}.{1} where thumb_loc is NULL'.format(schema,table_name,)).fetchall()
+	for link in query:
+		print(link)
+		r = requests.get(link[1], auth=HTTPBasicAuth(api_user,api_pass))
+		path = "thumbnails/" + link[2] + ".jpg"
+		if r.status_code == 200:
+			open("static/" + path, 'wb').write(r.content)
+		engine.execute("update {0}.{1} set thumb_loc='{2}' where index='{3}'".format(schema,table_name,path,link[0]))
 
 def download_file(db_user,db_pass,api_user,api_pass,id,table_name='s2_metadata', schema='satellit', database='afstand'):
 	api = get_api(api_user,api_pass)
@@ -90,7 +100,6 @@ def inventory_create(db_user, db_pass, database):
 	engine = init_db(db_user, db_pass, database)
 	engine.execute("truncate satellit.download_status")
 	for element in os.listdir('output/aoi'):
-		os.mkdir('output/aoi/' + str(element) + "/analyser")
 		for file in os.listdir('output/aoi/' + str(element)):
 			my_file = os.path.splitext(file)
 			if my_file[0][-3:] == 'TCI':

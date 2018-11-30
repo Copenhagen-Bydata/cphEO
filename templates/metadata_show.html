@@ -27,7 +27,7 @@
   <tr>
    <th scope="row">{{loop.index}}</th>
     <td class="index_no">{{data[0]}}</td>
-    <td><img heigth="128px" width="128px"  src="{{ url_for('static', filename=data[3]) }}"></img></td>
+    <td>{% if data[3] %}<img heigth="128px" width="128px"  src="{{ url_for('static', filename=data[3]) }}"></img>{% else %}{% endif %}</td>
     <td>{{data[1]}}</td>
     <td>{{data[4]}}</td>
     <td>{{data[2]}}</td>

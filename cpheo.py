@@ -20,6 +20,10 @@ def init_db(db_user,db_pass,database):
 	cur = conn.cursor()
 	return cur
 
+@app.route("/")
+def hello_eo():
+	return render_template("welcome.html")
+
 @app.route("/metadata/reset")
 def metadata_reset():
 	# Her skal man kunne initiere eller lave reset på metadata
@@ -36,13 +40,13 @@ def metadata_update():
 @app.route("/metadata/<table>")
 def metadata(table):
 	cur = init_db('emil','12345','afstand')
-	cur.execute("SELECT a.index,a.cloudcoverpercentage,to_char(a.ingestiondate, 'YYYY-MM-DD'),a.thumb_loc,to_char(a.endposition,'YYYY-MM-DD'),b.dl from satellit.{0} as a left outer join satellit.download_status as b on a.index = b.index where a.cloudcoverpercentage < 30 and a.processinglevel = 'Level-1C' and a.platformserialidentifier='Sentinel-2A' order by a.endposition desc".format(table))
+	cur.execute("SELECT a.index,a.cloudcoverpercentage,to_char(a.ingestiondate, 'YYYY-MM-DD'),a.thumb_loc,to_char(a.endposition,'YYYY-MM-DD'),b.dl from satellit.{0} as a left outer join satellit.download_status as b on a.index = b.index order by a.endposition desc".format(table))
 	my_metadata = cur.fetchall()
 	# Lige nu faar man al data i metadatatabellen
 	return render_template('metadata_show.html', metadata=my_metadata)
 
 @app.route("/inventory/create")
-def inventory_create():
+def inventory_creator():
 	from cpheo import inv_create
 	inv_create.delay()
 	return redirect(url_for('download_status'))
@@ -59,9 +63,13 @@ def download_status():
 	i = celery.control.inspect()
 	return render_template('status.html', active=i.active(), registered=i.registered(), scheduled=i.scheduled())
 
+@app.route("/analysis/green")
+def analyse_green():
+	pass
+
 @app.route("/download/manual/<image_id>")
 def download_image_backdoor(image_id):
-	from cpheo import download_file
+	from cpheo import dl_file
 	image_id = image_id.split(",")
 	if len(image_id) > 1:
 		download_file.delay('emil','12345','hy42','PqwurxnX1',image_id)
@@ -72,14 +80,14 @@ def download_image_backdoor(image_id):
 
 @app.route("/download/", methods=['POST'])
 def download_image():
-        from cpheo import download_file, cleanup_files
+        from cpheo import dl_file, cleanup_files
         image_id = request.form['indexFiles']
         image_id = image_id.split(",")
         if len(image_id) > 1:
-                download_file.delay('emil','12345','hy42','PqwurxnX1',image_id)
+                dl_file.delay('emil','12345','hy42','PqwurxnX1',image_id)
                 cleanup_files.delay(True)
         else:
-                download_file.delay('emil','12345','hy42','PqwurxnX1',image_id[0])
+                dl_file.delay('emil','12345','hy42','PqwurxnX1',image_id[0])
                 cleanup_files.delay(True)
         # Her kan man downloade et specifikt billede
         return redirect(url_for('download_status'))
@@ -98,19 +106,9 @@ if __name__ == "__main__":
     app.run(host='0.0.0.0')
 
 @celery.task()
-def download_file(db_user,db_pass,api_user,api_pass,id,table_name='s2_metadata', schema='satellit', database='afstand'):
-	from tasks.download_sentinel import get_api
-	from tasks.download_sentinel import unzip_file
-	from tasks.download_sentinel import init_db
-	from tasks.download_sentinel import db_get_filenames
-	api = get_api(api_user,api_pass)
-	if isinstance(id,list):
-		query = db_get_filenames(db_user,db_pass,id, table_name, schema, database)
-		api.download_all(id,'data')
-		unzip_file(id,db_user,db_pass,table_name,schema,database,list=True)
-	else:
-		api.download(id,'data')
-		unzip_file(id,db_user,db_pass,table_name,schema,database,list=False)
+def dl_file(db_user,db_pass,api_user,api_pass,id):
+	from tasks.download_sentinel import download_file
+	download_file(db_user, db_pass, api_user, api_pass, id)
 
 @celery.task()
 def dl_metadata(db_user,db_pass,api_user,api_pass):
@@ -131,3 +129,7 @@ def cleanup_files(with_cleanup):
 def inv_create():
 	from tasks.download_sentinel import inventory_create
 	inventory_create('emil','12345','afstand')
+
+@celery.task()
+def anal_green():
+	pass
